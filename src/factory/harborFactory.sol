@@ -20,17 +20,21 @@ contract HarborFactory {
         string memory name = string(abi.encodePacked("Harbor ", poolCount));
         string memory symbol = string(abi.encodePacked("HBR", poolCount));
 
-        Pool pool = new Pool(name, symbol);
         PoolManager manager = new PoolManager(
-            address(pool),
             msg.sender,
             tokenAddr,
-            poolCount
+            poolCount,
+            address(this)
         );
+        Pool pool = new Pool(name, symbol, address(manager), tokenAddr);
 
         pools[poolCount] = address(pool);
         poolCount++;
 
         return (pool, manager);
+    }
+
+    function getPool(uint256 poolId) public view returns (address) {
+        return pools[poolId];
     }
 }
