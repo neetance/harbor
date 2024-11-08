@@ -7,8 +7,12 @@ import {HarborFactory} from "../factory/harborFactory.sol";
 
 contract PoolManager {
     error Insufficient_Balance();
+    error Not_Manager();
+    error Withdrawal_Amount_Exceeds_Limit();
 
     event LiquidityAdded(address indexed user, uint256 amount);
+    event LiquidityWithdrawn(address indexed user, uint256 amount);
+    event FundsWithdrawn(address indexed fundManager, uint256 amount);
 
     enum Tier {
         T1,
@@ -41,9 +45,14 @@ contract PoolManager {
         s_allowances[Tier.T3] = 25;
     }
 
+    modifier onlyFundManager(address caller) {
+        if (!s_managers[caller]) revert Not_Manager();
+        _;
+    }
+
     /**
      * @dev Adds 'amount' amount of tokens as liquidity to the pool
-     * NOTE: The user must approve the pool manager contract to spend the tokens before calling this function
+     * NOTE The user must approve the pool manager contract to spend the tokens before calling this function
      */
 
     function addLiquidity(uint256 amount) public {
@@ -73,6 +82,24 @@ contract PoolManager {
             pool.totalSupply();
 
         pool.withdrawLiquidity(amountToTransfer, msg.sender);
+        emit LiquidityWithdrawn(msg.sender, amount);
+    }
+
+    /**
+     * @dev Lets a fund manager withdraw 'amount' amount of tokens from the liquidity pool for investing
+     * NOTE Reverts if the amount is higer than the manager's tier limt
+     */
+
+    function withdrawFunds(uint256 amount) public onlyFundManager(msg.sender) {
+        Tier tier = s_tiers[msg.sender];
+        uint256 maxAmount = getWithdrawalLimit(tier);
+
+        if (amount > maxAmount) revert Withdrawal_Amount_Exceeds_Limit();
+
+        Pool pool = Pool(i_factory.getPool(i_poolId));
+        pool.withdrawLiquidity(amount, msg.sender);
+
+        emit FundsWithdrawn(msg.sender, amount);
     }
 
     /**
@@ -82,5 +109,13 @@ contract PoolManager {
     function getTotalLiquidity() public view returns (uint256) {
         Pool pool = Pool(i_factory.getPool(i_poolId));
         return ERC20(i_token).balanceOf(address(pool));
+    }
+
+    function getWithdrawalLimit(Tier tier) public view returns (uint256) {
+        uint256 totalLiquidity = getTotalLiquidity();
+        uint256 allowancePerc = s_allowances[tier];
+
+        uint256 withdrawalLimit = (allowancePerc * totalLiquidity) / 100;
+        return withdrawalLimit;
     }
 }
