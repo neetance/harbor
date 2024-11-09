@@ -13,6 +13,7 @@ contract PoolManager {
     event LiquidityAdded(address indexed user, uint256 amount);
     event LiquidityWithdrawn(address indexed user, uint256 amount);
     event FundsWithdrawn(address indexed fundManager, uint256 amount);
+    event FundsReturned(address indexed fundManager, uint256 amount);
 
     enum Tier {
         T1,
@@ -21,8 +22,11 @@ contract PoolManager {
     }
 
     mapping(address => bool) private s_managers;
+    mapping(address => uint256) private s_owing;
     mapping(address => Tier) private s_tiers;
     mapping(Tier => uint256) private s_allowances; //determines the maximum percentage of the total liquidity that a fund manager is allowed to withdraw based on their tier
+
+    uint256 private s_rewardPercentage = 20;
 
     address private immutable i_token;
     uint256 private immutable i_poolId;
@@ -64,7 +68,6 @@ contract PoolManager {
     }
 
     /**
-     *
      * @dev Burns 'amount' amount of lp tokens from the user's account, calculates the amount of tokens to be
      *      transferred to the users based on the current liquidity and total supply and then returns them back
      *      to the user
@@ -81,7 +84,7 @@ contract PoolManager {
         uint256 amountToTransfer = (amount * getTotalLiquidity()) /
             pool.totalSupply();
 
-        pool.withdrawLiquidity(amountToTransfer, msg.sender);
+        pool.transferTokens(amountToTransfer, msg.sender);
         emit LiquidityWithdrawn(msg.sender, amount);
     }
 
@@ -96,10 +99,36 @@ contract PoolManager {
 
         if (amount > maxAmount) revert Withdrawal_Amount_Exceeds_Limit();
 
+        s_owing[msg.sender] += amount;
         Pool pool = Pool(i_factory.getPool(i_poolId));
-        pool.withdrawLiquidity(amount, msg.sender);
+        pool.transferTokens(amount, msg.sender);
 
         emit FundsWithdrawn(msg.sender, amount);
+    }
+
+    /**
+     * @dev Returns the funds borrowed by the fund manager to the pool. In case of profit, the fund manager's cut
+     *      is calculated and transferred to the fund manager
+     * NOTE The fund manager must approve the pool manager contract to spend the tokens before calling this function
+     */
+
+    function returnFunds(uint256 amount) public onlyFundManager(msg.sender) {
+        Pool pool = Pool(i_factory.getPool(i_poolId));
+        uint256 owing = s_owing[msg.sender];
+
+        if (amount > owing) {
+            s_owing[msg.sender] = 0;
+            uint256 profit = amount - owing;
+            uint256 fundManagersCut = (profit * s_rewardPercentage) / 100;
+
+            ERC20(i_token).transferFrom(msg.sender, address(pool), amount);
+            pool.transferTokens(fundManagersCut, msg.sender);
+        } else {
+            s_owing[msg.sender] -= amount;
+            ERC20(i_token).transferFrom(msg.sender, address(pool), amount);
+        }
+
+        emit FundsReturned(msg.sender, amount);
     }
 
     /**
@@ -110,6 +139,10 @@ contract PoolManager {
         Pool pool = Pool(i_factory.getPool(i_poolId));
         return ERC20(i_token).balanceOf(address(pool));
     }
+
+    /**
+     * @dev returns the max withdrawal limit based on the fund manager's tier
+     */
 
     function getWithdrawalLimit(Tier tier) public view returns (uint256) {
         uint256 totalLiquidity = getTotalLiquidity();

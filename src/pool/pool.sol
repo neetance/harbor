@@ -32,10 +32,7 @@ contract Pool is ERC20 {
         _burn(from, amount);
     }
 
-    function withdrawLiquidity(
-        uint256 amount,
-        address to
-    ) external onlyManager {
+    function transferTokens(uint256 amount, address to) external onlyManager {
         ERC20(i_token).transfer(to, amount);
     }
 }
