@@ -24,13 +24,25 @@ contract Pool is ERC20 {
         _;
     }
 
+    /**
+     * @dev Mints the given amount of lp tokens to the given address
+     */
+
     function mint(address to, uint256 amount) external onlyManager {
         _mint(to, amount);
     }
 
+    /**
+     * @dev Burns the given amount of lp tokens from the given address
+     */
+
     function burn(address from, uint256 amount) external onlyManager {
         _burn(from, amount);
     }
+
+    /**
+     * @dev Transfers the given amount of tokens to the given address
+     */
 
     function transferTokens(uint256 amount, address to) external onlyManager {
         ERC20(i_token).transfer(to, amount);

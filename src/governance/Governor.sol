@@ -134,6 +134,10 @@ contract Governor {
         return proposalId;
     }
 
+    /**
+     * @dev Proposes a change in the reward percentage for the fund managers
+     */
+
     function proposeChangeReward(
         uint256 newRewardPercentage
     ) public returns (uint256) {

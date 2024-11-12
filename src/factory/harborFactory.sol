@@ -18,6 +18,10 @@ contract HarborFactory {
         daoAddr = address(dao);
     }
 
+    /**
+     * @dev Creates a new pool with the given token address and returns the pool and pool manager
+     */
+
     function createNewPool(
         address tokenAddr
     ) public returns (Pool, PoolManager) {
@@ -37,6 +41,10 @@ contract HarborFactory {
 
         return (pool, manager);
     }
+
+    /**
+     * @dev Returns the pool address mapped to the given poolId
+     */
 
     function getPool(uint256 poolId) public view returns (address) {
         return pools[poolId];
