@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import {ERC20} from "@openzeppelin/token/ERC20/ERC20.sol";
 import {Pool} from "./pool.sol";
 import {HarborFactory} from "../factory/harborFactory.sol";
-import {GovernFM} from "../governance/GovernFM.sol";
+import {Governor} from "../governance/Governor.sol";
 
 contract PoolManager {
     error Insufficient_Balance();
@@ -19,6 +19,8 @@ contract PoolManager {
     event ManagerAdded(address indexed manager);
     event ManagerRemoved(address indexed manager);
     event TierSet(address indexed manager, Tier indexed tier);
+    event RewardPercentageSet(uint256 percentage);
+    event AllowanceSet(Tier indexed tier, uint256 allowance);
 
     enum Tier {
         T1,
@@ -30,11 +32,16 @@ contract PoolManager {
     mapping(address => uint256) private s_owing;
     mapping(address => Tier) private s_tiers;
     mapping(Tier => uint256) private s_allowances; //determines the maximum percentage of the total liquidity that a fund manager is allowed to withdraw based on their tier
+    mapping(Tier => uint256) private s_maxAllowances;
+    mapping(Tier => uint256) private s_minAllowances;
+
+    uint256 public constant MAX_REWARD_PERCENTAGE = 25;
+    uint256 public constant MIN_REWARD_PERCENTAGE = 15;
 
     uint256 private s_rewardPercentage = 20;
 
     address private immutable i_token;
-    address private immutable i_governFM;
+    address private immutable i_governor;
     uint256 private immutable i_poolId;
     HarborFactory private immutable i_factory;
 
@@ -54,8 +61,16 @@ contract PoolManager {
         s_allowances[Tier.T2] = 15;
         s_allowances[Tier.T3] = 25;
 
-        GovernFM governFM = new GovernFM(poolId, factoryAddr, address(this));
-        i_governFM = address(governFM);
+        s_maxAllowances[Tier.T1] = 10;
+        s_maxAllowances[Tier.T2] = 20;
+        s_maxAllowances[Tier.T3] = 30;
+
+        s_minAllowances[Tier.T1] = 5;
+        s_minAllowances[Tier.T2] = 11;
+        s_minAllowances[Tier.T3] = 21;
+
+        Governor governor = new Governor(poolId, factoryAddr, address(this));
+        i_governor = address(governor);
     }
 
     modifier onlyFundManager(address caller) {
@@ -63,8 +78,8 @@ contract PoolManager {
         _;
     }
 
-    modifier onlyGovFM(address caller) {
-        if (caller != i_governFM) revert Forbidden_Caller();
+    modifier onlyGov(address caller) {
+        if (caller != i_governor) revert Forbidden_Caller();
         _;
     }
 
@@ -150,7 +165,7 @@ contract PoolManager {
      * NOTE Only the governance contract can call this function
      */
 
-    function addFundManager(address manager) external onlyGovFM(msg.sender) {
+    function addFundManager(address manager) external onlyGov(msg.sender) {
         s_managers[manager] = true;
         s_tiers[manager] = Tier.T1;
         emit ManagerAdded(manager);
@@ -161,7 +176,7 @@ contract PoolManager {
      * NOTE Only the governance contract can call this function
      */
 
-    function removeFundManager(address manager) external onlyGovFM(msg.sender) {
+    function removeFundManager(address manager) external onlyGov(msg.sender) {
         s_managers[manager] = false;
         emit ManagerRemoved(manager);
     }
@@ -171,12 +186,34 @@ contract PoolManager {
      * NOTE Only the governance contract can call this function
      */
 
-    function setTier(
-        address manager,
-        Tier tier
-    ) external onlyGovFM(msg.sender) {
+    function setTier(address manager, Tier tier) external onlyGov(msg.sender) {
         s_tiers[manager] = tier;
         emit TierSet(manager, tier);
+    }
+
+    /**
+     * @dev Changes the reward percentage for the fund managers
+     * NOTE Only the governance contract can call this function
+     */
+
+    function setRewardPercentage(
+        uint256 percentage
+    ) external onlyGov(msg.sender) {
+        s_rewardPercentage = percentage;
+        emit RewardPercentageSet(percentage);
+    }
+
+    /**
+     * @dev Changes the allowance for a fund manager's tier
+     * NOTE Only the governance contract can call this function
+     */
+
+    function setAllowance(
+        Tier tier,
+        uint256 allowance
+    ) external onlyGov(msg.sender) {
+        s_allowances[tier] = allowance;
+        emit AllowanceSet(tier, allowance);
     }
 
     /**
@@ -198,6 +235,38 @@ contract PoolManager {
 
         uint256 withdrawalLimit = (allowancePerc * totalLiquidity) / 100;
         return withdrawalLimit;
+    }
+
+    /**
+     * @dev returns the reward percentage for the fund managers based on the tier
+     */
+
+    function getCurrentAllowance(Tier tier) public view returns (uint256) {
+        return s_allowances[tier];
+    }
+
+    /**
+     * @dev returns the max reward percentage for a perticular tier
+     */
+
+    function getMaxAllownace(Tier tier) public view returns (uint256) {
+        return s_maxAllowances[tier];
+    }
+
+    /**
+     * @dev returns the min reward percentage for a perticular tier
+     */
+
+    function getMinAllownace(Tier tier) public view returns (uint256) {
+        return s_minAllowances[tier];
+    }
+
+    /**
+     * @dev returns the reward percentage for the fund managers
+     */
+
+    function getRewardPercentage() public view returns (uint256) {
+        return s_rewardPercentage;
     }
 
     /**
