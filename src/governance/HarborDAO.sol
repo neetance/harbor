@@ -20,6 +20,7 @@ contract HarborDAO {
         address indexed voter,
         bool indexed vote
     );
+    event ProposalExecuted(uint256 indexed proposalId, Status indexed result);
 
     enum Status {
         PENDING,
@@ -90,9 +91,7 @@ contract HarborDAO {
         uint256 balance = pool.balanceOf(msg.sender);
 
         if (balance == 0) revert Not_DAO_Member();
-
         if (block.timestamp > proposal.deadline) revert Proposal_Expired();
-
         if (s_hasVoted[msg.sender]) revert Already_Voted();
 
         s_hasVoted[msg.sender] = true;
@@ -116,9 +115,13 @@ contract HarborDAO {
 
         if (proposal.posVotes > proposal.negVotes) {
             proposal.status = Status.ACCEPTED;
+            emit ProposalExecuted(proposal.id, proposal.status);
+
             return true;
         } else {
             proposal.status = Status.REJECTED;
+            emit ProposalExecuted(proposal.id, proposal.status);
+
             return false;
         }
     }

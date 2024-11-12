@@ -4,16 +4,21 @@ pragma solidity ^0.8.20;
 import {ERC20} from "@openzeppelin/token/ERC20/ERC20.sol";
 import {Pool} from "./pool.sol";
 import {HarborFactory} from "../factory/harborFactory.sol";
+import {GovernFM} from "../governance/GovernFM.sol";
 
 contract PoolManager {
     error Insufficient_Balance();
     error Not_Manager();
     error Withdrawal_Amount_Exceeds_Limit();
+    error Forbidden_Caller();
 
     event LiquidityAdded(address indexed user, uint256 amount);
     event LiquidityWithdrawn(address indexed user, uint256 amount);
     event FundsWithdrawn(address indexed fundManager, uint256 amount);
     event FundsReturned(address indexed fundManager, uint256 amount);
+    event ManagerAdded(address indexed manager);
+    event ManagerRemoved(address indexed manager);
+    event TierSet(address indexed manager, Tier indexed tier);
 
     enum Tier {
         T1,
@@ -29,6 +34,7 @@ contract PoolManager {
     uint256 private s_rewardPercentage = 20;
 
     address private immutable i_token;
+    address private immutable i_governFM;
     uint256 private immutable i_poolId;
     HarborFactory private immutable i_factory;
 
@@ -47,10 +53,18 @@ contract PoolManager {
         s_allowances[Tier.T1] = 8;
         s_allowances[Tier.T2] = 15;
         s_allowances[Tier.T3] = 25;
+
+        GovernFM governFM = new GovernFM(poolId, factoryAddr, address(this));
+        i_governFM = address(governFM);
     }
 
     modifier onlyFundManager(address caller) {
         if (!s_managers[caller]) revert Not_Manager();
+        _;
+    }
+
+    modifier onlyGovFM(address caller) {
+        if (caller != i_governFM) revert Forbidden_Caller();
         _;
     }
 
@@ -132,6 +146,40 @@ contract PoolManager {
     }
 
     /**
+     * @dev Adds a new fund manager to the pool manager contract
+     * NOTE Only the governance contract can call this function
+     */
+
+    function addFundManager(address manager) external onlyGovFM(msg.sender) {
+        s_managers[manager] = true;
+        s_tiers[manager] = Tier.T1;
+        emit ManagerAdded(manager);
+    }
+
+    /**
+     * @dev Removes a fund manager from the pool manager contract
+     * NOTE Only the governance contract can call this function
+     */
+
+    function removeFundManager(address manager) external onlyGovFM(msg.sender) {
+        s_managers[manager] = false;
+        emit ManagerRemoved(manager);
+    }
+
+    /**
+     * @dev Changes the tier of a fund manager
+     * NOTE Only the governance contract can call this function
+     */
+
+    function setTier(
+        address manager,
+        Tier tier
+    ) external onlyGovFM(msg.sender) {
+        s_tiers[manager] = tier;
+        emit TierSet(manager, tier);
+    }
+
+    /**
      * @dev returns the total liquidity in the pool
      */
 
@@ -150,5 +198,22 @@ contract PoolManager {
 
         uint256 withdrawalLimit = (allowancePerc * totalLiquidity) / 100;
         return withdrawalLimit;
+    }
+
+    /**
+     * @dev returns true if the address is a fund manager, false otherwise
+     */
+
+    function isManager(address manager) public view returns (bool) {
+        return s_managers[manager];
+    }
+
+    /**
+     * @dev returns the tier of the fund manager
+     */
+
+    function getTier(address manager) public view returns (Tier) {
+        if (!s_managers[manager]) revert Not_Manager();
+        return s_tiers[manager];
     }
 }

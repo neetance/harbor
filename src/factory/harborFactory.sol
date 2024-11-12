@@ -3,15 +3,19 @@ pragma solidity ^0.8.20;
 
 import {Pool} from "../pool/pool.sol";
 import {PoolManager} from "../pool/poolManager.sol";
+import {HarborDAO} from "../governance/HarborDAO.sol";
 
 contract HarborFactory {
     event NewHarbor(address harborAddress, string name, string symbol);
 
     uint256 private poolCount;
+    address private daoAddr;
     mapping(uint256 => address) private pools;
 
     constructor() {
         poolCount = 0;
+        HarborDAO dao = new HarborDAO(address(this));
+        daoAddr = address(dao);
     }
 
     function createNewPool(
