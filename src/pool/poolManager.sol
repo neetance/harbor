@@ -285,4 +285,12 @@ contract PoolManager {
         if (!s_managers[manager]) revert Not_Manager();
         return s_tiers[manager];
     }
+
+    /**
+     * @dev returns the address of the governance contract
+     */
+
+    function getGovAddr() public view returns (address) {
+        return i_governor;
+    }
 }

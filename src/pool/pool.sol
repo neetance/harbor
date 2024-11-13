@@ -47,4 +47,12 @@ contract Pool is ERC20 {
     function transferTokens(uint256 amount, address to) external onlyManager {
         ERC20(i_token).transfer(to, amount);
     }
+
+    /**
+     * @dev Returns the manager address
+     */
+
+    function getManager() public view returns (address) {
+        return i_manager;
+    }
 }

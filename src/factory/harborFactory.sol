@@ -34,7 +34,7 @@ contract HarborFactory {
             poolCount,
             address(this)
         );
-        Pool pool = new Pool(name, symbol, address(manager), tokenAddr);
+        Pool pool = new Pool(name, symbol, tokenAddr, address(manager));
 
         pools[poolCount] = address(pool);
         poolCount++;
@@ -48,5 +48,13 @@ contract HarborFactory {
 
     function getPool(uint256 poolId) public view returns (address) {
         return pools[poolId];
+    }
+
+    /**
+     * @dev Returns the DAO address
+     */
+
+    function getDAO() public view returns (address) {
+        return daoAddr;
     }
 }
