@@ -110,8 +110,7 @@ contract PoolManager {
         if (balance < amount) revert Insufficient_Balance();
 
         pool.burn(msg.sender, amount);
-        uint256 amountToTransfer = (amount * getTotalLiquidity()) /
-            pool.totalSupply();
+        uint256 amountToTransfer = amount * getPriceOfLPToken();
 
         pool.transferTokens(amountToTransfer, msg.sender);
         emit LiquidityWithdrawn(msg.sender, amount);
@@ -287,10 +286,27 @@ contract PoolManager {
     }
 
     /**
+     * @dev returns the amount of tokens owed by the fund manager
+     */
+
+    function getAmountOwing(address manager) public view returns (uint256) {
+        return s_owing[manager];
+    }
+
+    /**
      * @dev returns the address of the governance contract
      */
 
     function getGovAddr() public view returns (address) {
         return i_governor;
+    }
+
+    /**
+     * @dev returns the address of the token contract
+     */
+
+    function getPriceOfLPToken() public view returns (uint256) {
+        Pool pool = Pool(i_factory.getPool(i_poolId));
+        return (((getTotalLiquidity() * 1e18) / pool.totalSupply()));
     }
 }

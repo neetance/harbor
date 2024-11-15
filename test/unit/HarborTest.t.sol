@@ -40,15 +40,40 @@ contract HarborTest is Test {
         address[] memory LPs = new address[](5);
         for (uint256 i = 10; i < 15; i++) {
             address lp = address(uint160(i));
-            token.mint(lp, 150);
+            token.mint(lp, 150e18);
             vm.startPrank(lp);
-            token.approve(address(manager), 125);
-            manager.addLiquidity(125);
+            token.approve(address(manager), 125e18);
+            manager.addLiquidity(125e18);
             vm.stopPrank();
             LPs[i - 10] = lp;
         }
+        //uint256 withdrawalLimit = manager.getWithdrawalLimit();
 
-        return LPs;
+        return (LPs);
+    }
+
+    function withdrawFunds(
+        PoolManager manager,
+        address fm,
+        uint256 amount
+    ) internal returns (uint256) {
+        uint256 totalLiquidity = manager.getTotalLiquidity();
+
+        vm.prank(fm);
+        manager.withdrawFunds(amount);
+
+        return totalLiquidity;
+    }
+
+    function returnFunds(
+        PoolManager manager,
+        address fm,
+        uint256 amountReturning
+    ) internal {
+        vm.startPrank(fm);
+        token.approve(address(manager), amountReturning);
+        manager.returnFunds(amountReturning);
+        vm.stopPrank();
     }
 
     //Tests
@@ -67,9 +92,67 @@ contract HarborTest is Test {
         (Pool pool, PoolManager manager, ) = createPool();
         address[] memory LPs = addLiquidity(manager);
 
-        assertEq(pool.totalSupply(), 625);
-        assertEq(token.balanceOf(address(pool)), 625);
-        assertEq(pool.balanceOf(LPs[0]), 125);
-        assertEq(token.balanceOf(LPs[0]), 25);
+        assertEq(pool.totalSupply(), 625e18);
+        assertEq(token.balanceOf(address(pool)), 625e18);
+        assertEq(pool.balanceOf(LPs[0]), 125e18);
+        assertEq(token.balanceOf(LPs[0]), 25e18);
+    }
+
+    function testWithdrawingFundsRevertsIfNotManager() external {
+        (, PoolManager manager, ) = createPool();
+        addLiquidity(manager);
+
+        vm.expectRevert(PoolManager.Not_Manager.selector);
+        vm.prank(address(51));
+        manager.withdrawFunds(125);
+    }
+
+    function testWithdrawingFundsRevertsIfExceedsAllowance() external {
+        (, PoolManager manager, address fm) = createPool();
+        addLiquidity(manager);
+
+        uint256 withdrawalLimit = manager.getWithdrawalLimit(
+            manager.getTier(fm)
+        );
+        console.log("Withdrawal limit: ", withdrawalLimit);
+
+        vm.expectRevert(PoolManager.Withdrawal_Amount_Exceeds_Limit.selector);
+        vm.prank(fm);
+        manager.withdrawFunds(withdrawalLimit + 1);
+    }
+
+    function testWithdrawingFunds() external {
+        (Pool pool, PoolManager manager, address fm) = createPool();
+        uint256 withdrawalLimit = manager.getWithdrawalLimit(
+            manager.getTier(fm)
+        );
+        addLiquidity(manager);
+        withdrawFunds(manager, fm, withdrawalLimit);
+
+        assertEq(manager.getAmountOwing(fm), withdrawalLimit);
+        assertEq(token.balanceOf(address(pool)), 625e18 - withdrawalLimit);
+        assertEq(token.balanceOf(fm), withdrawalLimit);
+        assertEq(manager.getTotalLiquidity(), 625e18 - withdrawalLimit);
+    }
+
+    function testReturningFunds() external {
+        // In case of loss
+
+        (Pool pool, PoolManager manager, address fm) = createPool();
+        addLiquidity(manager);
+        uint256 withdrawalLimit = manager.getWithdrawalLimit(
+            manager.getTier(fm)
+        );
+        uint256 totalLiquidity = manager.getTotalLiquidity();
+
+        uint256 amountToWithdraw = withdrawalLimit - 5e18;
+        uint256 amountReturning = amountToWithdraw - 10e18;
+        withdrawFunds(manager, fm, amountToWithdraw);
+        returnFunds(manager, fm, amountReturning);
+
+        uint256 loss = amountToWithdraw - amountReturning;
+        assertEq(manager.getAmountOwing(fm), loss);
+        assertEq(token.balanceOf(address(pool)), totalLiquidity - loss);
+        console.log("Price of lp: ", manager.getPriceOfLPToken());
     }
 }
